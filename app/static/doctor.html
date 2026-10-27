@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>筆談・翻訳 医師用</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --sub:#5b6475; --line:#d9dde4; --accent:#1f6feb; --ok:#1a7f37; --warn:#b35900; --ng:#c62828; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"BIZ UDGothic","Hiragino Sans","Yu Gothic UI",sans-serif; background:var(--bg); color:var(--ink); font-size:16px; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0 12px 0 0; }
+  .chip { font-size:13px; padding:3px 8px; border-radius:99px; background:#eef1f5; color:var(--sub); }
+  .chip.ok { background:#e6f4ea; color:var(--ok); } .chip.ng { background:#fdecea; color:var(--ng); }
+  main { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; padding:16px; max-width:1400px; margin:0 auto; }
+  @media (max-width:1000px){ main{ grid-template-columns:1fr; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--sub); font-weight:600; }
+  h2 b { color:var(--ink); }
+  textarea { width:100%; font:inherit; font-size:20px; line-height:1.5; padding:10px; border:1px solid var(--line); border-radius:8px; resize:vertical; }
+  textarea[readonly] { background:#f3f4f6; }
+  button { font:inherit; padding:10px 16px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.send { background:var(--ok); color:#fff; border-color:var(--ok); font-size:18px; padding:12px 24px; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  button.rec { font-size:18px; padding:14px 22px; }
+  button.rec.on { background:var(--ng); color:#fff; border-color:var(--ng); }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .muted { color:var(--sub); font-size:13px; }
+  .raw { color:var(--sub); font-size:14px; margin:6px 0 10px; white-space:pre-wrap; }
+  .back { font-size:20px; line-height:1.5; padding:10px; background:#fff8e6; border:1px solid #f0d9a8; border-radius:8px; min-height:3em; white-space:pre-wrap; }
+  .warn { color:var(--warn); font-size:14px; }
+  .err { color:var(--ng); font-size:14px; white-space:pre-wrap; }
+  #preview { width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; display:block; }
+  select, input[type=text] { font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; }
+  .phrases button { font-size:14px; padding:6px 10px; margin:0 6px 6px 0; }
+  ol.hist { padding-left:20px; margin:0; font-size:14px; } ol.hist li { margin-bottom:8px; }
+  .reply { font-size:14px; padding:2px 8px; border-radius:6px; background:#e8f0fe; margin-left:6px; }
+  #toast { position:fixed; right:20px; bottom:20px; background:#1d2330; color:#fff; padding:14px 18px; border-radius:10px; font-size:18px; display:none; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>筆談・翻訳（医師用）</h1>
+  <label class="muted">受付番号 <input type="text" id="encounter" size="10" placeholder="例 0123"></label>
+  <label class="muted">患者の言語
+    <select id="lang"></select>
+  </label>
+  <span class="chip" id="st-asr">音声認識: -</span>
+  <span class="chip" id="st-tr">翻訳: -</span>
+  <span class="chip" id="st-serial">電子ペーパー: -</span>
+  <span class="chip" id="st-patient">患者画面: -</span>
+</header>
+
+<main>
+<div>
+  <section>
+    <h2><b>① 話す / 入力する</b></h2>
+    <div class="row">
+      <button class="rec" id="rec">● 録音開始</button>
+      <span class="muted">F8 を押している間も録音（フットスイッチに F8 を割り当て可）</span>
+      <button id="manual">テキストで入力</button>
+    </div>
+    <div class="phrases" id="phrases" style="margin-top:12px"></div>
+  </section>
+
+  <section id="step-ja" class="hidden">
+    <h2><b>② 日本語を確認・修正</b>　（音声認識の結果は患者には送られません）</h2>
+    <div class="raw" id="raw"></div>
+    <textarea id="ja" rows="3"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btn-translate">翻訳して確認する</button>
+      <span class="warn hidden" id="ja-stale">日本語が変更されました。翻訳し直してください。</span>
+    </div>
+  </section>
+
+  <section id="step-tr" class="hidden">
+    <h2><b>③ 翻訳を確認</b>　下の「日本語に戻した文」で意味が合っているか確認してください</h2>
+    <div class="muted">訳文（患者に表示される文）</div>
+    <textarea id="tr" rows="3"></textarea>
+    <div class="row" style="margin:6px 0 12px">
+      <button id="btn-back" class="hidden">直した訳文を日本語に戻して確認</button>
+      <span class="warn hidden" id="tr-stale">訳文が変更されました。日本語に戻して確認するまで送信できません。</span>
+    </div>
+    <div class="muted">訳文を日本語に戻した文（確認用・別の翻訳として独立に作成）</div>
+    <div class="back" id="back"></div>
+  </section>
+
+  <section id="step-send" class="hidden">
+    <h2><b>④ 患者に送る</b>　下は患者の電子ペーパーに出る画面そのものです</h2>
+    <img id="preview" alt="プレビュー">
+    <div class="warn hidden" id="overflow">文が長すぎて画面に収まりません。2回に分けて送ってください。</div>
+    <div class="row" style="margin-top:12px">
+      <button class="send" id="btn-send">患者に送る</button>
+      <button id="btn-clear">患者の画面を消す</button>
+      <span id="send-result" class="muted"></span>
+    </div>
+  </section>
+  <div class="err" id="err"></div>
+</div>
+
+<div>
+  <section>
+    <h2><b>送信履歴</b>（この画面を開いてから）</h2>
+    <ol class="hist" id="hist"></ol>
+  </section>
+  <section>
+    <h2><b>ログ</b></h2>
+    <a id="csv" href="#">今日のログをCSVで保存</a>
+    <p class="muted">logs/ フォルダに1日1ファイル（JSON Lines）で保存されています。</p>
+  </section>
+  <section>
+    <h2><b>患者用画面</b></h2>
+    <p class="muted">タブレット等のブラウザで <code id="patient-url"></code> を開くと表示先になります。</p>
+  </section>
+</div>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PHRASES = [
+  "こんにちは。担当医の〇〇です。", "今日はどうされましたか。", "いつからですか。", "痛い場所を指でさしてください。",
+  "痛みは10段階でいくつですか。", "アレルギーはありますか。", "今飲んでいる薬はありますか。",
+  "血液検査をします。", "レントゲンを撮ります。", "少しお待ちください。", "お大事にしてください。",
+];
+let cur = null;           // 現在のメッセージ（サーバー側の状態の写し）
+let recorder = null, chunks = [];
+
+async function api(path, body, isForm) {
+  const opt = { method: "POST" };
+  if (isForm) opt.body = body;
+  else if (body) { opt.headers = { "Content-Type": "application/json" }; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail || msg; } catch (_) {}
+    throw new Error(msg);
+  }
+  return r;
+}
+function showErr(e) { $("err").textContent = e ? String(e.message || e) : ""; }
+function toast(text) { const t = $("toast"); t.textContent = text; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 6000); }
+function isJa() { return $("lang").value === "ja"; }
+function chip(id, label, value, ok) { const c = $(id); c.textContent = `${label}: ${value}`; c.className = "chip " + (ok ? "ok" : "ng"); }
+
+async function refreshState() {
+  const s = await (await fetch("/api/state")).json();
+  if (!$("lang").options.length) {
+    for (const [k, v] of Object.entries(s.languages)) $("lang").add(new Option(v, k));
+    $("encounter").value = s.encounter;
+  }
+  chip("st-asr", "音声認識", s.asr, s.asr === "OK");
+  chip("st-tr", "翻訳", s.translator, s.translator === "OK");
+  chip("st-serial", "電子ペーパー", s.serial, /接続:|READY/.test(s.serial));
+  chip("st-patient", "患者画面", s.patient_screens + "台", s.patient_screens > 0);
+}
+
+function render() {
+  const has = !!cur;
+  $("step-ja").classList.toggle("hidden", !has);
+  $("step-tr").classList.toggle("hidden", !has || isJa() || !cur.translation);
+  $("btn-translate").classList.toggle("hidden", isJa());
+  if (!has) { $("step-send").classList.add("hidden"); return; }
+  $("raw").textContent = cur.asr_raw != null ? `音声認識の結果: ${cur.asr_raw || "（聞き取れませんでした）"}` : "テキスト入力";
+  const ja = $("ja").value.trim();
+  let ready, stale = false, trStale = false;
+  if (isJa()) {
+    ready = ja.length > 0;
+  } else {
+    stale = !!cur.translation && ja !== cur.translated_from;
+    trStale = !!cur.translation && $("tr").value.trim() !== cur.translation;
+    ready = !!cur.translation && !stale && !trStale;
+  }
+  $("ja-stale").classList.toggle("hidden", !stale);
+  $("tr-stale").classList.toggle("hidden", !trStale);
+  $("btn-back").classList.toggle("hidden", !trStale);
+  $("step-send").classList.toggle("hidden", !ready);
+  $("btn-send").disabled = !ready;
+  if (ready) schedulePreview();
+}
+
+let pvTimer = null;
+function schedulePreview() {
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(async () => {
+    const body = isJa() ? { lang: "ja", text: $("ja").value.trim() }
+                        : { lang: cur.lang, text: cur.translation, japanese: $("ja").value.trim() };
+    try {
+      const r = await api("/api/preview.png", body);
+      $("overflow").classList.toggle("hidden", r.headers.get("X-Overflow") !== "1");
+      const url = URL.createObjectURL(await r.blob());
+      const old = $("preview").src; $("preview").src = url; if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    } catch (e) { showErr(e); }
+  }, 250);
+}
+
+function load(msg) {
+  cur = msg;
+  $("ja").value = msg.source_ja || "";
+  $("tr").value = msg.translation || "";
+  $("back").textContent = msg.back_translation || "";
+  $("send-result").textContent = "";
+  render();
+}
+
+async function newManual(text = "") {
+  showErr();
+  const r = await api("/api/message", { lang: $("lang").value, text });
+  load(await r.json());
+  $("ja").focus();
+}
+
+// ---- 録音 ----
+function pickMime() {
+  for (const m of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]) if (MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+async function startRec() {
+  if (recorder) return;
+  showErr();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const mime = pickMime();
+  recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+  chunks = [];
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const type = recorder.mimeType || "audio/webm";
+    recorder = null;
+    $("rec").className = "rec"; $("rec").textContent = "認識中…"; $("rec").disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append("audio", new Blob(chunks, { type }), type.includes("mp4") ? "rec.m4a" : "rec.webm");
+      fd.append("lang", $("lang").value);
+      load(await (await api("/api/transcribe", fd, true)).json());
+    } catch (e) { showErr(e); }
+    finally { $("rec").disabled = false; $("rec").textContent = "● 録音開始"; }
+  };
+  recorder.start();
+  $("rec").className = "rec on"; $("rec").textContent = "■ 録音停止";
+}
+function stopRec() { if (recorder && recorder.state === "recording") recorder.stop(); }
+
+$("rec").onclick = () => (recorder ? stopRec() : startRec().catch(showErr));
+let keyHeld = false;
+document.addEventListener("keydown", e => { if (e.key === "F8" && !keyHeld) { keyHeld = true; e.preventDefault(); startRec().catch(showErr); } });
+document.addEventListener("keyup", e => { if (e.key === "F8") { keyHeld = false; e.preventDefault(); stopRec(); } });
+
+// ---- 翻訳・確認・送信 ----
+$("manual").onclick = () => newManual().catch(showErr);
+$("ja").oninput = render;
+$("tr").oninput = render;
+$("lang").onchange = () => { if (cur) { cur.lang = $("lang").value; cur.translation = null; cur.back_translation = null; $("tr").value = ""; $("back").textContent = ""; } render(); };
+$("encounter").onchange = () => api("/api/encounter", { label: $("encounter").value }).catch(showErr);
+
+$("btn-translate").onclick = async () => {
+  showErr(); const b = $("btn-translate"); b.disabled = true; b.textContent = "翻訳中…";
+  try { load(await (await api(`/api/message/${cur.id}/translate`, { source_ja: $("ja").value, lang: $("lang").value })).json()); }
+  catch (e) { showErr(e); }
+  finally { b.disabled = false; b.textContent = "翻訳して確認する"; }
+};
+$("btn-back").onclick = async () => {
+  showErr(); const b = $("btn-back"); b.disabled = true;
+  try {
+    const keepJa = $("ja").value;
+    load(await (await api(`/api/message/${cur.id}/backtranslate`, { translation: $("tr").value })).json());
+    $("ja").value = keepJa; render();
+  } catch (e) { showErr(e); }
+  finally { b.disabled = false; }
+};
+$("btn-send").onclick = async () => {
+  showErr(); const b = $("btn-send"); b.disabled = true;
+  try {
+    const body = { lang: $("lang").value, source_ja: $("ja").value, translation: isJa() ? null : $("tr").value };
+    const res = await (await api(`/api/message/${cur.id}/send`, body)).json();
+    $("send-result").textContent = "送信しました → " + res.delivered.join(", ") + (res.errors.length ? "（一部失敗: " + res.errors.join(" / ") + "）" : "");
+    addHistory(cur, body.source_ja);
+  } catch (e) { showErr(e); }
+  finally { b.disabled = false; }
+};
+$("btn-clear").onclick = () => api("/api/clear").then(() => toast("患者の画面を消しました")).catch(showErr);
+
+function addHistory(msg, ja) {
+  const li = document.createElement("li");
+  li.dataset.id = msg.id;
+  const time = new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  li.textContent = `${time} ${ja}` + (msg.translation && msg.lang !== "ja" ? ` → ${msg.translation}` : "");
+  $("hist").prepend(li);
+}
+
+// ---- 患者からの返答 ----
+function connectWs() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/doctor`);
+  ws.onmessage = ev => {
+    const d = JSON.parse(ev.data);
+    if (d.type === "reply") {
+      toast(`患者の返答: ${d.label}`);
+      const li = [...$("hist").children].find(x => x.dataset.id === d.msg_id);
+      if (li) { const s = document.createElement("span"); s.className = "reply"; s.textContent = d.label; li.append(s); }
+    }
+    if (d.type === "status") refreshState();
+  };
+  ws.onclose = () => setTimeout(connectWs, 2000);
+}
+
+for (const p of PHRASES) {
+  const b = document.createElement("button"); b.textContent = p;
+  b.onclick = () => newManual(p).catch(showErr);
+  $("phrases").append(b);
+}
+$("csv").href = `/api/logs/${new Date().toLocaleDateString("sv-SE")}.csv`;
+$("patient-url").textContent = `http://<このPCのIPアドレス>:${location.port || 80}/patient`;
+refreshState().then(render);
+setInterval(refreshState, 10000);
+connectWs();
+</script>
+</body>
+</html>

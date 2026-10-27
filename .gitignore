@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+logs/
+audio/
+.env
+config.local.json
+firmware/**/build/
+tools/emulator_screen.png
+.pytest_cache/

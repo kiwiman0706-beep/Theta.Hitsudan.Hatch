@@ -1,0 +1,7 @@
+{
+  "asr_model": "large-v3-turbo",
+  "asr_device": "auto",
+  "serial_port": "COM5",
+  "save_audio": false,
+  "show_japanese_under_translation": true
+}
