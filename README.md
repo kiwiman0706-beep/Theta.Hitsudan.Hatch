@@ -16,7 +16,8 @@
 app/
   server.py          サーバー本体（確認フロー・送信・ログ）
   asr.py             音声認識（faster-whisper、PC内で処理）
-  translator.py      翻訳と逆翻訳（Claude API）
+  start.py           2ウインドウ起動（医師用・患者用）
+  translator.py      翻訳と逆翻訳（Gemini API / Claude API）
   render.py          患者側画面の画像化（電子ペーパー用）
   serial_display.py  USB接続の電子ペーパー端末への送信
   logstore.py        ログ（JSON Lines / CSV出力）
@@ -52,20 +53,26 @@ pip install -r app/requirements.txt
 
 NVIDIA GPU で音声認識を速くしたい場合（Windows）は、faster-whisper の説明に従って CUDA 12 用の cuBLAS / cuDNN を入れてください（`pip install nvidia-cublas-cu12 nvidia-cudnn-cu12` が手軽です）。GPU がなければ CPU で動きます。
 
-### 1-2. 翻訳用の API キー
+### 1-2. 翻訳用の API キー（Gemini）
 
-[Anthropic Console](https://console.anthropic.com/) で API キーを作り、環境変数に設定します。
+[Google AI Studio](https://aistudio.google.com/apikey) で API キーを作り、環境変数 `GEMINI_API_KEY` に設定します。
 
 ```powershell
-# Windows（ユーザー環境変数に保存。新しいターミナルから有効）
-setx ANTHROPIC_API_KEY "sk-ant-..."
+# Windows（ユーザー環境変数に保存。新しく開いたターミナルから有効）
+setx GEMINI_API_KEY "AIza..."
 ```
 ```bash
 # Mac（~/.zshrc に追記）
-echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc && source ~/.zshrc
+echo 'export GEMINI_API_KEY="AIza..."' >> ~/.zshrc && source ~/.zshrc
 ```
 
-筆談（日本語のみ）で使うだけならキーは不要です。その場合は設定で `"translator": "none"` にしてください。
+> **重要（個人情報）**: Gemini API の **無料枠** では、送った内容が Google のサービス改善に使われることがあります。
+> 診察で使うときは、AI Studio でそのプロジェクトに **請求（Billing）を設定した有料枠** にしてください。有料枠では送信内容は学習等に使われません（最新の利用規約で確認してください）。
+> テストは架空の文で行ってください。
+
+- モデルは既定で `gemini-3.8-flash`。変更は `config.local.json` の `gemini_model` で。
+- Claude を使う場合は `"translator": "claude"` にして `ANTHROPIC_API_KEY` を設定。
+- 筆談（日本語のみ）だけならキーは不要です（キーがなくても翻訳以外は動きます）。
 
 ### 1-3. 設定（任意）
 
@@ -89,15 +96,27 @@ echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc && source ~/.zshrc
 
 ## 2. 起動と使い方
 
-```bash
-cd app
-python server.py
-```
+### 2ウインドウで起動（このPCだけで使う）
 
-- 医師用画面: ブラウザで http://localhost:8000/
-- 患者用画面（タブレット等）: 同じ Wi-Fi のタブレットで `http://<医師PCのIPアドレス>:8000/patient`
-  - IP は Windows なら `ipconfig`、Mac なら `ipconfig getifaddr en0` で確認
-  - 初回は Windows のファイアウォールの許可を求められます（プライベートネットワークのみ許可）
+- Windows: `start_windows.bat` をダブルクリック
+- Mac: `start_mac.command` をダブルクリック（初回は右クリック→「開く」）
+- またはターミナルで `cd app` → `python start.py`
+
+Edge か Chrome が「アドレスバーのない窓」で2つ開きます。
+
+| ウインドウ | 内容 |
+|---|---|
+| 医師用（左） | 録音・確認・送信の操作画面。マイクの許可は自動 |
+| 患者用（右） | 確認して送った文だけが大きく出る。ダブルクリックで全画面 |
+
+- 患者用ウインドウは患者さんの方へ向けたノートPCの画面や、手元の小さなモニターに移動して使います。位置と大きさは `config.local.json` の `patient_window`（x, y, 幅, 高さ）、最初から全画面にするなら `"patient_fullscreen": true`。
+- **医師用ウインドウを閉じると全部終了** します。
+- 次の段階で外部の表示機器（電子ペーパー端末など）を足しても、操作は同じです（3章）。
+
+### タブレットにも表示したい場合
+
+`config.local.json` に `"host": "0.0.0.0"` を設定して起動し、同じ Wi-Fi のタブレットで `http://<医師PCのIPアドレス>:8000/patient` を開きます。
+IP は Windows なら `ipconfig`、Mac なら `ipconfig getifaddr en0` で確認できます。初回は Windows のファイアウォールの許可を求められます（プライベートネットワークのみ許可）。
 
 ### 診察での操作
 

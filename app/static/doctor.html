@@ -152,7 +152,7 @@ async function refreshState() {
     $("encounter").value = s.encounter;
   }
   chip("st-asr", "音声認識", s.asr, s.asr === "OK");
-  chip("st-tr", "翻訳", s.translator, s.translator === "OK");
+  chip("st-tr", "翻訳", s.translator, s.translator.startsWith("OK"));
   chip("st-serial", "電子ペーパー", s.serial, /接続:|READY/.test(s.serial));
   chip("st-patient", "患者画面", s.patient_screens + "台", s.patient_screens > 0);
 }

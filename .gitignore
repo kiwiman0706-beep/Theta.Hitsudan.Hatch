@@ -8,3 +8,4 @@ config.local.json
 firmware/**/build/
 tools/emulator_screen.png
 .pytest_cache/
+.browser/

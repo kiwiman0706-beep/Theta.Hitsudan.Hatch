@@ -136,7 +136,7 @@ def get_state():
         "languages": {k: v[0] for k, v in LANGUAGES.items()},
         "encounter": state["encounter"],
         "asr": "準備中" if asr._model is None and not asr.error else (asr.error or "OK"),
-        "translator": "OK" if translator.enabled else "無効",
+        "translator": translator.status(),
         "serial": state["serial_status"],
         "patient_screens": len(hub.patient),
     }

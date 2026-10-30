@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULTS: dict = {
     # --- サーバー ---
-    "host": "0.0.0.0",          # 患者用タブレットからLAN経由で見る場合は 0.0.0.0
+    "host": "127.0.0.1",        # このPCだけで使う。タブレット等からLAN経由で見るなら "0.0.0.0"
     "port": 8000,
     # --- 音声認識 (faster-whisper, ローカル実行) ---
     "asr_enabled": True,
@@ -20,10 +20,15 @@ DEFAULTS: dict = {
     # 医療用語の認識精度を上げるためのヒント（固有名詞・薬剤名などを並べる）
     "asr_initial_prompt": "これは病院の診察室での医師の説明です。血圧、採血、点滴、内服薬、副作用、アレルギー、レントゲン、CT、MRI。",
     "save_audio": False,             # 音声ファイルを残すか（個人情報なので既定は残さない）
-    # --- 翻訳 (Claude API) ---
-    "translator": "claude",          # "claude" / "none"（翻訳なし: 手入力のみ）
+    # --- 翻訳 ---
+    "translator": "gemini",          # "gemini" / "claude" / "none"（翻訳なし: 筆談のみ）
+    "gemini_model": "gemini-3.8-flash",
     "claude_model": "claude-opus-5-5",
     "claude_effort": "medium",
+    # --- 2ウインドウ起動 (start.py) ---
+    "browser": "",                   # 空なら Edge / Chrome を自動で探す。パスを書けばそれを使う
+    "patient_window": [1000, 80, 960, 600],  # 患者用ウインドウの x, y, 幅, 高さ
+    "patient_fullscreen": False,     # 患者用ウインドウを全画面で開く（もう一台の画面に置く場合など）
     # --- 表示 ---
     "display_width": 960,            # M5PaperS3 の横置き解像度
     "display_height": 540,

@@ -1,7 +1,8 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 python-multipart>=0.0.9
-anthropic>=1.0
+google-genai>=1.0
+anthropic>=1.0        # translator=claude にする場合のみ必要
 faster-whisper>=1.1
 pyserial>=3.5
 Pillow>=10.0

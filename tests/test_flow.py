@@ -63,6 +63,9 @@ import logstore  # noqa: E402
 class FakeTranslator:
     enabled = True
 
+    def status(self):
+        return "OK（fake）"
+
     def translate(self, ja, lang):
         return f"[{lang}] {ja}"
 

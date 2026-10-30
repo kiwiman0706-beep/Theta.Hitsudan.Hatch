@@ -2,10 +2,10 @@
 
 逆翻訳は「順翻訳とは別の会話」で行う。同じ会話の中だと元の日本語を覚えていて、
 訳文に誤りがあっても元の意味で日本語に戻してしまい、確認にならないため。
+
+翻訳エンジンは設定 translator で切り替える: "gemini"（既定）/ "claude" / "none"
 """
 from __future__ import annotations
-
-import anthropic
 
 from config import CONFIG
 from languages import LANGUAGES
@@ -30,14 +30,56 @@ class TranslationError(RuntimeError):
     pass
 
 
-class Translator:
-    def __init__(self) -> None:
-        self.enabled = CONFIG["translator"] == "claude"
-        self._client = anthropic.Anthropic() if self.enabled else None
+class _Gemini:
+    """Google Gemini API。APIキーは環境変数 GEMINI_API_KEY から読む。"""
 
-    def _call(self, system: str, text: str) -> str:
-        if not self._client:
-            raise TranslationError("翻訳は無効です（設定 translator=none）")
+    def __init__(self) -> None:
+        from google import genai
+        from google.genai import errors, types
+
+        self._types = types
+        self._errors = errors
+        self._client = genai.Client()
+
+    def call(self, system: str, text: str) -> str:
+        types, errors = self._types, self._errors
+        try:
+            response = self._client.models.generate_content(
+                model=CONFIG["gemini_model"],
+                contents=text,
+                config=types.GenerateContentConfig(system_instruction=system),
+            )
+        except errors.ClientError as e:
+            if e.code == 429:
+                raise TranslationError("翻訳APIの利用上限に達しました。少し待って再試行してください") from e
+            if e.code in (401, 403) or "API key" in (e.message or ""):
+                raise TranslationError("Gemini APIキーが無効です（環境変数 GEMINI_API_KEY を確認）") from e
+            raise TranslationError(f"翻訳APIエラー ({e.code}): {e.message}") from e
+        except errors.APIError as e:
+            raise TranslationError(f"翻訳APIエラー ({e.code}): {e.message}") from e
+        except OSError as e:
+            raise TranslationError(f"翻訳サーバーに接続できません: {e}") from e
+
+        feedback = getattr(response, "prompt_feedback", None)
+        if feedback is not None and feedback.block_reason:
+            raise TranslationError(f"翻訳が拒否されました（{feedback.block_reason}）。表現を変えて再試行してください")
+        out = (response.text or "").strip()
+        if not out:
+            raise TranslationError("翻訳結果が空でした。もう一度試してください")
+        return out
+
+
+class _Claude:
+    """Anthropic Claude API。APIキーは環境変数 ANTHROPIC_API_KEY から読む。"""
+
+    def __init__(self) -> None:
+        import anthropic
+
+        self._anthropic = anthropic
+        self._client = anthropic.Anthropic()
+
+    def call(self, system: str, text: str) -> str:
+        anthropic = self._anthropic
         try:
             response = self._client.beta.messages.create(
                 model=CONFIG["claude_model"],
@@ -62,6 +104,35 @@ class Translator:
         if not out:
             raise TranslationError("翻訳結果が空でした")
         return out
+
+
+_BACKENDS = {"gemini": _Gemini, "claude": _Claude}
+
+
+class Translator:
+    def __init__(self) -> None:
+        self.name = CONFIG["translator"]
+        self.error: str | None = None
+        self._backend = None
+        if self.name in _BACKENDS:
+            try:
+                self._backend = _BACKENDS[self.name]()
+            except Exception as e:  # noqa: BLE001 - 起動は止めず、画面に理由を出す（筆談は使える）
+                self.error = f"{self.name}: {e}"
+
+    @property
+    def enabled(self) -> bool:
+        return self._backend is not None
+
+    def status(self) -> str:
+        if self._backend:
+            return f"OK（{self.name}）"
+        return self.error or "無効"
+
+    def _call(self, system: str, text: str) -> str:
+        if not self._backend:
+            raise TranslationError("翻訳が使えません: " + (self.error or "設定 translator=none"))
+        return self._backend.call(system, text)
 
     def translate(self, japanese: str, lang: str) -> str:
         target = LANGUAGES[lang][1]

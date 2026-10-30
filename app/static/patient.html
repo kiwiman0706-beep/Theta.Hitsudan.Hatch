@@ -64,6 +64,11 @@ function connect() {
   ws.onclose = () => setTimeout(connect, 2000);
 }
 window.addEventListener("resize", fit);
+// 画面をダブルクリックすると全画面表示の切り替え
+document.addEventListener("dblclick", e => {
+  if (e.target.tagName === "BUTTON") return;
+  document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+});
 connect();
 </script>
 </body>
